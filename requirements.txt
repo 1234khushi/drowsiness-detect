@@ -1,0 +1,7 @@
+streamlit==1.55.0
+tensorflow==2.20.0
+opencv-python==4.11.0.86
+numpy==1.26.4
+scipy==1.11.4
+ultralytics==8.4.24
+tf-keras==2.20.1
