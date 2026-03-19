@@ -2,9 +2,7 @@
 __pycache__/
 
 # Local model artifacts
-drowsiness_model.h5
 yolov8n.pt
-age_model/*.caffemodel
 
 # Training and test datasets
 train/
