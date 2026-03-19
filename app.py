@@ -1,4 +1,6 @@
 import json
+import os
+import urllib.request
 from pathlib import Path
 
 import cv2
@@ -9,6 +11,33 @@ from tf_keras.models import model_from_json
 from ultralytics import YOLO
 
 BASE_DIR = Path(__file__).resolve().parent
+AGE_MODEL_DIR = BASE_DIR / "age_model"
+
+
+def get_config_value(key: str):
+    if key in os.environ:
+        return os.environ[key]
+
+    try:
+        return st.secrets[key]
+    except Exception:
+        return None
+
+
+def ensure_file(path: Path, config_key: str):
+    if path.exists():
+        return path
+
+    download_url = get_config_value(config_key)
+    if not download_url:
+        raise FileNotFoundError(
+            f"Missing required file: {path.name}. "
+            f"Add it to the repo or set {config_key} in Streamlit secrets."
+        )
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    urllib.request.urlretrieve(download_url, path)
+    return path
 
 # ------------------ LOAD MODELS ------------------
 
@@ -41,17 +70,39 @@ def load_legacy_h5_model(model_path: Path):
 
 @st.cache_resource(show_spinner=False)
 def load_models():
-    yolo_model = YOLO("yolov8n.pt")
-    drowsy_model = load_legacy_h5_model(BASE_DIR / "drowsiness_model.h5")
+    drowsiness_model_path = ensure_file(
+        BASE_DIR / "drowsiness_model.h5",
+        "DROWSINESS_MODEL_URL",
+    )
+    age_proto_path = ensure_file(
+        AGE_MODEL_DIR / "age_deploy.prototxt",
+        "AGE_PROTO_URL",
+    )
+    age_model_path = ensure_file(
+        AGE_MODEL_DIR / "age_net.caffemodel",
+        "AGE_MODEL_URL",
+    )
 
+    yolo_model = YOLO("yolov8n.pt")
+    drowsy_model = load_legacy_h5_model(drowsiness_model_path)
     age_net = cv2.dnn.readNetFromCaffe(
-        str(BASE_DIR / "age_model" / "age_deploy.prototxt"),
-        str(BASE_DIR / "age_model" / "age_net.caffemodel")
+        str(age_proto_path),
+        str(age_model_path),
     )
 
     return yolo_model, drowsy_model, age_net
 
-yolo_model, drowsy_model, age_net = load_models()
+try:
+    yolo_model, drowsy_model, age_net = load_models()
+except FileNotFoundError as exc:
+    st.title("Drowsiness Detection System")
+    st.error(str(exc))
+    st.info(
+        "For Streamlit Cloud, either commit the model files to the repo or add "
+        "`DROWSINESS_MODEL_URL`, `AGE_PROTO_URL`, and `AGE_MODEL_URL` in app secrets "
+        "so the files can be downloaded at startup."
+    )
+    st.stop()
 
 AGE_LIST = ['(0-2)', '(4-6)', '(8-12)', '(15-20)',
             '(25-32)', '(38-43)', '(48-53)', '(60-100)']
